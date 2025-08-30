@@ -20,7 +20,11 @@ jobs:
 
     - name: Install Visual Studio Build Tools
       run: |
-        choco install -y visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK --add Microsoft.VisualStudio.Component.VC.CMake.Project"
+        choco install -y visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK --add Microsoft.VisualStudio.Component.VC.CMake.Project --add Microsoft.VisualStudio.Component.VC.v141.x86.x64"
+
+    - name: Install aria2 for faster downloads
+      run: |
+        choco install -y aria2
 
     - name: Install VCPKG
       run: |
@@ -33,6 +37,7 @@ jobs:
       run: |
         dir C:\vcpkg
         .\vcpkg\vcpkg version
+        .\vcpkg\vcpkg list
 
     - name: Clear VCPKG cache
       run: |
@@ -40,15 +45,21 @@ jobs:
         Remove-Item -Recurse -Force C:\vcpkg\packages -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force C:\vcpkg\installed -ErrorAction SilentlyContinue
 
-    - name: Install aria2 for faster downloads
+    - name: Check available ports
       run: |
-        choco install -y aria2
+        .\vcpkg\vcpkg search libvpx
+        .\vcpkg\vcpkg search libyuv
+        .\vcpkg\vcpkg search opus
+        dir C:\vcpkg\ports\libvpx
+        dir C:\vcpkg\ports\libyuv
+        dir C:\vcpkg\ports\opus
+        dir D:\a\rustdesk\rustdesk\res\vcpkg
 
     - name: Install libvpx with retries
       run: |
         for ($i = 1; $i -le 3; $i++) {
           Write-Output "Attempt $i to install libvpx"
-          .\vcpkg\vcpkg install libvpx:x64-windows-static --debug --clean-after-build
+          .\vcpkg\vcpkg install libvpx:x64-windows-static --classic --debug --clean-after-build --x-use-aria2
           if ($?) { break }
           Start-Sleep -Seconds 5
         }
@@ -58,7 +69,7 @@ jobs:
       run: |
         for ($i = 1; $i -le 3; $i++) {
           Write-Output "Attempt $i to install libyuv"
-          .\vcpkg\vcpkg install libyuv:x64-windows-static --debug --clean-after-build
+          .\vcpkg\vcpkg install libyuv:x64-windows-static --classic --debug --clean-after-build --x-use-aria2
           if ($?) { break }
           Start-Sleep -Seconds 5
         }
@@ -68,7 +79,7 @@ jobs:
       run: |
         for ($i = 1; $i -le 3; $i++) {
           Write-Output "Attempt $i to install opus"
-          .\vcpkg\vcpkg install opus:x64-windows-static --debug --clean-after-build
+          .\vcpkg\vcpkg install opus:x64-windows-static --classic --debug --clean-after-build --x-use-aria2
           if ($?) { break }
           Start-Sleep -Seconds 5
         }
