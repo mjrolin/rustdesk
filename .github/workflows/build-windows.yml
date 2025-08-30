@@ -1,76 +1,26 @@
-@"
-name: Build Windows
+name: Build RustDesk for Windows with VCPKG
 
 on:
-  workflow_dispatch:
   push:
     branches: [ master ]
 
-env:
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
-
 jobs:
-  build-windows:
-    runs-on: windows-2022
-    
+  build:
+    runs-on: windows-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Export GitHub Actions cache environment variables
-      uses: actions/github-script@v7
-      with:
-        script: |
-          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-        
-    - name: Apply Customizations
-      shell: powershell
+    - uses: actions/checkout@v3
+    - name: Setup Rust
       run: |
-        Write-Host "Aplicando customizações..." -ForegroundColor Green
-        (Get-Content "libs\hbb_common\src\config.rs") -replace 'RustDesk', 'MyRustDesk' | Set-Content "libs\hbb_common\src\config.rs"
-        (Get-Content "libs\hbb_common\src\config.rs") -replace 'rs-ny.rustdesk.com', 'rust.opentime.net.br' | Set-Content "libs\hbb_common\src\config.rs" 
-        (Get-Content "libs\hbb_common\src\config.rs") -replace 'OeVuKk5nlHiXp\+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=', 'ZjwYUYkzdbD3UU2k6MFm8wXsgwmAJXqlERUiCqqgscA=' | Set-Content "libs\hbb_common\src\config.rs"
-        (Get-Content "Cargo.toml") -replace 'ProductName = "RustDesk"', 'ProductName = "MyRustDesk"' | Set-Content "Cargo.toml"
-        Write-Host "Customizações aplicadas!" -ForegroundColor Green
-        
-    - name: Setup vcpkg with GitHub Actions binary cache
-      uses: lukka/run-vcpkg@v11
-      with:
-        vcpkgDirectory: C:\vcpkg
-        vcpkgGitCommitId: `${{ env.VCPKG_COMMIT_ID }}
-
-    - name: Install vcpkg dependencies
-      shell: cmd
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "C:\Users\runneradmin\.cargo\bin" >> $GITHUB_PATH
+    - name: Install VCPKG
       run: |
-        C:\vcpkg\vcpkg.exe install --triplet=x64-windows-static --x-install-root=C:\vcpkg\installed
-        
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: stable
-        targets: x86_64-pc-windows-msvc
-
-    - uses: Swatinem/rust-cache@v2
-      with:
-        prefix-key: rustdesk-lib-cache
-        shared-key: windows
-        
+        git clone https://github.com/microsoft/vcpkg.git
+        .\vcpkg\bootstrap-vcpkg.bat
+        echo "VCPKG_ROOT=C:\vcpkg" >> $GITHUB_ENV
+    - name: Install dependencies with VCPKG
+      run: |
+        .\vcpkg\vcpkg install libvpx libyuv opus
+        .\vcpkg\vcpkg integrate install
     - name: Build RustDesk
-      shell: bash
-      run: |
-        export VCPKG_ROOT=C:\\vcpkg
-        cargo build --release --target=x86_64-pc-windows-msvc --features hwcodec,vram
-        
-    - name: Upload Windows Executable
-      uses: actions/upload-artifact@v4
-      with:
-        name: MyRustDesk-Windows-x64
-        path: |
-          target/x86_64-pc-windows-msvc/release/*.exe
-          target/x86_64-pc-windows-msvc/release/*.dll
-        retention-days: 30
-"@ | Out-File -FilePath ".github\workflows\build-windows.yml" -Encoding UTF8 -Force
+      run: cargo build --release
