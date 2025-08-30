@@ -1,0 +1,40 @@
+﻿name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Apply Customizations
+      shell: powershell
+      run: |
+        (Get-Content "libs\hbb_common\src\config.rs") -replace 'RustDesk', 'MyRustDesk' | Set-Content "libs\hbb_common\src\config.rs"
+        (Get-Content "libs\hbb_common\src\config.rs") -replace 'rs-ny.rustdesk.com', 'rust.opentime.net.br' | Set-Content "libs\hbb_common\src\config.rs" 
+        (Get-Content "libs\hbb_common\src\config.rs") -replace 'OeVuKk5nlHiXp\+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=', 'ZjwYUYkzdbD3UU2k6MFm8wXsgwmAJXqlERUiCqqgscA=' | Set-Content "libs\hbb_common\src\config.rs"
+        (Get-Content "Cargo.toml") -replace 'ProductName = "RustDesk"', 'ProductName = "MyRustDesk"' | Set-Content "Cargo.toml"
+        
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+        targets: x86_64-pc-windows-msvc
+        
+    - name: Build
+      run: |
+        cargo build --release --target x86_64-pc-windows-msvc
+        
+    - name: Upload Windows Executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: MyRustDesk-Windows
+        path: target/x86_64-pc-windows-msvc/release/*.exe
