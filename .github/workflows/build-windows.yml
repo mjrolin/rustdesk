@@ -20,15 +20,12 @@ jobs:
 
     - name: Install Visual Studio Build Tools
       run: |
-        choco install -y visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK"
+        choco install -y visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK --add Microsoft.VisualStudio.Component.VC.CMake.Project"
 
     - name: Install VCPKG
       run: |
         git clone https://github.com/microsoft/vcpkg.git
-        cd vcpkg
-        git checkout 2023.10.19
-        .\bootstrap-vcpkg.bat -disableMetrics
-        cd ..
+        .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
         echo "VCPKG_ROOT=C:\vcpkg" >> $GITHUB_ENV
         echo "C:\vcpkg" >> $GITHUB_PATH
 
@@ -43,23 +40,39 @@ jobs:
         Remove-Item -Recurse -Force C:\vcpkg\packages -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force C:\vcpkg\installed -ErrorAction SilentlyContinue
 
-    - name: Install libvpx
+    - name: Install aria2 for faster downloads
       run: |
-        .\vcpkg\vcpkg install libvpx:x64-windows-static --debug --clean-after-build
-        dir C:\vcpkg\installed\x64-windows-static\include
-        dir C:\vcpkg\installed\x64-windows-static\lib
+        choco install -y aria2
 
-    - name: Install libyuv
+    - name: Install libvpx with retries
       run: |
-        .\vcpkg\vcpkg install libyuv:x64-windows-static --debug --clean-after-build
-        dir C:\vcpkg\installed\x64-windows-static\include
-        dir C:\vcpkg\installed\x64-windows-static\lib
+        for ($i = 1; $i -le 3; $i++) {
+          Write-Output "Attempt $i to install libvpx"
+          .\vcpkg\vcpkg install libvpx:x64-windows-static --debug --clean-after-build
+          if ($?) { break }
+          Start-Sleep -Seconds 5
+        }
+        if (-not $?) { exit 1 }
 
-    - name: Install opus
+    - name: Install libyuv with retries
       run: |
-        .\vcpkg\vcpkg install opus:x64-windows-static --debug --clean-after-build
-        dir C:\vcpkg\installed\x64-windows-static\include
-        dir C:\vcpkg\installed\x64-windows-static\lib
+        for ($i = 1; $i -le 3; $i++) {
+          Write-Output "Attempt $i to install libyuv"
+          .\vcpkg\vcpkg install libyuv:x64-windows-static --debug --clean-after-build
+          if ($?) { break }
+          Start-Sleep -Seconds 5
+        }
+        if (-not $?) { exit 1 }
+
+    - name: Install opus with retries
+      run: |
+        for ($i = 1; $i -le 3; $i++) {
+          Write-Output "Attempt $i to install opus"
+          .\vcpkg\vcpkg install opus:x64-windows-static --debug --clean-after-build
+          if ($?) { break }
+          Start-Sleep -Seconds 5
+        }
+        if (-not $?) { exit 1 }
 
     - name: Integrate VCPKG
       run: |
@@ -67,11 +80,11 @@ jobs:
 
     - name: Verify VCPKG installation
       run: |
-        dir C:\vcpkg\installed
-        dir C:\vcpkg\installed\x64-windows-static
-        dir C:\vcpkg\installed\x64-windows-static\include
-        dir C:\vcpkg\installed\x64-windows-static\include\opus
-        dir C:\vcpkg\installed\x64-windows-static\lib
+        dir C:\vcpkg\installed || echo "Directory C:\vcpkg\installed not found"
+        dir C:\vcpkg\installed\x64-windows-static || echo "Directory C:\vcpkg\installed\x64-windows-static not found"
+        dir C:\vcpkg\installed\x64-windows-static\include || echo "Directory C:\vcpkg\installed\x64-windows-static\include not found"
+        dir C:\vcpkg\installed\x64-windows-static\include\opus || echo "Directory C:\vcpkg\installed\x64-windows-static\include\opus not found"
+        dir C:\vcpkg\installed\x64-windows-static\lib || echo "Directory C:\vcpkg\installed\x64-windows-static\lib not found"
 
     - name: Build RustDesk
       env:
