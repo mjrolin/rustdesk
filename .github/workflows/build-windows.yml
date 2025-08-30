@@ -29,7 +29,10 @@ jobs:
     - name: Install VCPKG
       run: |
         git clone https://github.com/microsoft/vcpkg.git
-        .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+        cd vcpkg
+        git checkout 6f29f12e82a8293156836ad81cc9bf5af41fe836
+        .\bootstrap-vcpkg.bat -disableMetrics
+        cd ..
         echo "VCPKG_ROOT=C:\vcpkg" >> $GITHUB_ENV
         echo "C:\vcpkg" >> $GITHUB_PATH
 
@@ -50,16 +53,16 @@ jobs:
         .\vcpkg\vcpkg search libvpx
         .\vcpkg\vcpkg search libyuv
         .\vcpkg\vcpkg search opus
-        dir C:\vcpkg\ports\libvpx
-        dir C:\vcpkg\ports\libyuv
-        dir C:\vcpkg\ports\opus
-        dir D:\a\rustdesk\rustdesk\res\vcpkg
+        dir C:\vcpkg\ports\libvpx || echo "libvpx port not found"
+        dir C:\vcpkg\ports\libyuv || echo "libyuv port not found"
+        dir C:\vcpkg\ports\opus || echo "opus port not found"
+        dir D:\a\rustdesk\rustdesk\res\vcpkg || echo "Overlay ports not found"
 
     - name: Install libvpx with retries
       run: |
         for ($i = 1; $i -le 3; $i++) {
           Write-Output "Attempt $i to install libvpx"
-          .\vcpkg\vcpkg install libvpx:x64-windows-static --classic --debug --clean-after-build --x-use-aria2
+          .\vcpkg\vcpkg install libvpx:x64-windows-static --classic --debug --clean-after-build
           if ($?) { break }
           Start-Sleep -Seconds 5
         }
@@ -69,7 +72,7 @@ jobs:
       run: |
         for ($i = 1; $i -le 3; $i++) {
           Write-Output "Attempt $i to install libyuv"
-          .\vcpkg\vcpkg install libyuv:x64-windows-static --classic --debug --clean-after-build --x-use-aria2
+          .\vcpkg\vcpkg install libyuv:x64-windows-static --classic --debug --clean-after-build
           if ($?) { break }
           Start-Sleep -Seconds 5
         }
@@ -79,7 +82,7 @@ jobs:
       run: |
         for ($i = 1; $i -le 3; $i++) {
           Write-Output "Attempt $i to install opus"
-          .\vcpkg\vcpkg install opus:x64-windows-static --classic --debug --clean-after-build --x-use-aria2
+          .\vcpkg\vcpkg install opus:x64-windows-static --classic --debug --clean-after-build
           if ($?) { break }
           Start-Sleep -Seconds 5
         }
