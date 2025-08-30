@@ -1,40 +1,307 @@
-﻿name: Build Windows
+﻿name: Custom RustDesk Build
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [ "main", "master", "custom" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Nome da aplicação'
+        required: false
+        default: 'MyRustDesk'
+      company:
+        description: 'Identificador da empresa'
+        required: false
+        default: 'com.mycompany'
+
+env:
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
+  
+  # Configurações Personalizadas
+  CUSTOM_APP_NAME: ${{ github.event.inputs.app_name || 'MyRustDesk' }}
+  CUSTOM_COMPANY: ${{ github.event.inputs.company || 'com.mycompany' }}
+  CUSTOM_RENDEZVOUS_SERVER: "rust.opentime.net.br"
+  CUSTOM_API_SERVER: "http://rust.opentime.net.br:21114"
+  CUSTOM_RS_PUB_KEY: "ZjwYUYkzdbD3UU2k6MFm8wXsgwmAJXqlERUiCqqgscA="
 
 jobs:
   build-windows:
     runs-on: windows-2022
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: x86_64-pc-windows-msvc, arch: x86_64 }
+          
     steps:
-    - name: Checkout
+    - name: Checkout Repository
       uses: actions/checkout@v4
       with:
         submodules: recursive
-        
-    - name: Apply Customizations
+
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@v7
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Setup Custom Branding
       shell: powershell
       run: |
-        (Get-Content "libs\hbb_common\src\config.rs") -replace 'RustDesk', 'MyRustDesk' | Set-Content "libs\hbb_common\src\config.rs"
-        (Get-Content "libs\hbb_common\src\config.rs") -replace 'rs-ny.rustdesk.com', 'rust.opentime.net.br' | Set-Content "libs\hbb_common\src\config.rs" 
-        (Get-Content "libs\hbb_common\src\config.rs") -replace 'OeVuKk5nlHiXp\+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=', 'ZjwYUYkzdbD3UU2k6MFm8wXsgwmAJXqlERUiCqqgscA=' | Set-Content "libs\hbb_common\src\config.rs"
-        (Get-Content "Cargo.toml") -replace 'ProductName = "RustDesk"', 'ProductName = "MyRustDesk"' | Set-Content "Cargo.toml"
+        Write-Host "Aplicando customizações..." -ForegroundColor Green
         
-    - name: Install Rust
+        # 1. Atualizar nome da aplicação
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'RustDesk', '${{ env.CUSTOM_APP_NAME }}' | Set-Content libs/hbb_common/src/config.rs
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'com.carriez', '${{ env.CUSTOM_COMPANY }}' | Set-Content libs/hbb_common/src/config.rs
+        
+        # 2. Atualizar servidores
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'rs-ny.rustdesk.com', '${{ env.CUSTOM_RENDEZVOUS_SERVER }}' | Set-Content libs/hbb_common/src/config.rs
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'OeVuKk5nlHiXp\+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=', '${{ env.CUSTOM_RS_PUB_KEY }}' | Set-Content libs/hbb_common/src/config.rs
+        
+        # 3. Atualizar Cargo.toml
+        $appNameLower = '${{ env.CUSTOM_APP_NAME }}'.ToLower()
+        (Get-Content Cargo.toml) -replace 'name = "rustdesk"', "name = `"$appNameLower`"" | Set-Content Cargo.toml
+        (Get-Content Cargo.toml) -replace 'ProductName = "RustDesk"', 'ProductName = "${{ env.CUSTOM_APP_NAME }}"' | Set-Content Cargo.toml
+        (Get-Content Cargo.toml) -replace 'FileDescription = "RustDesk Remote Desktop"', 'FileDescription = "${{ env.CUSTOM_APP_NAME }} Remote Desktop"' | Set-Content Cargo.toml
+        
+        # 4. Verificar mudanças aplicadas
+        Write-Host "Verificando configurações aplicadas..." -ForegroundColor Yellow
+        Get-Content libs/hbb_common/src/config.rs | Select-String -Pattern "APP_NAME|RENDEZVOUS_SERVERS|RS_PUB_KEY" | ForEach-Object { Write-Host $_ }
+
+    - name: Remove Unwanted Features
+      shell: powershell
+      run: |
+        Write-Host "Removendo funcionalidades indesejadas..." -ForegroundColor Green
+        
+        # Desabilitar LAN Discovery por padrão
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'OPTION_ENABLE_LAN_DISCOVERY.*=.*"enable-lan-discovery"', 'OPTION_ENABLE_LAN_DISCOVERY: &str = "disable-lan-discovery"' | Set-Content libs/hbb_common/src/config.rs
+        
+        Write-Host "Funcionalidades removidas com sucesso!" -ForegroundColor Green
+
+    - name: Install Rust Toolchain
       uses: dtolnay/rust-toolchain@v1
       with:
         toolchain: stable
-        targets: x86_64-pc-windows-msvc
-        
-    - name: Build
+        targets: ${{ matrix.job.target }}
+
+    - name: Setup vcpkg with GitHub Actions binary cache
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: C:\vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+    - name: Install vcpkg dependencies
+      shell: cmd
       run: |
-        cargo build --release --target x86_64-pc-windows-msvc
+        C:\vcpkg\vcpkg.exe install --triplet=x64-windows-static --x-install-root=C:\vcpkg\installed
+
+    - name: Show version information
+      shell: bash
+      run: |
+        rustup -V
+        rustup toolchain list
+        rustup default
+        cargo -V
+        rustc -V
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: rustdesk-lib-cache
+        shared-key: windows
+
+    - name: Build RustDesk Core
+      shell: bash
+      run: |
+        export VCPKG_ROOT=C:\\vcpkg
+        cargo build --release --target=${{ matrix.job.target }} --features hwcodec,vram
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version: 3.24.4
+
+    - name: Build Flutter Desktop
+      shell: powershell
+      run: |
+        Write-Host "Building Flutter Desktop..." -ForegroundColor Green
+        cd flutter
         
-    - name: Upload Windows Executable
+        # Configurar Flutter para Windows Desktop
+        flutter config --enable-windows-desktop
+        flutter pub get
+        
+        # Build Windows Desktop
+        flutter build windows --release --dart-define=FLUTTER_WEB_USE_SKIA=true
+        
+        Write-Host "Flutter build concluído!" -ForegroundColor Green
+
+    - name: Package Application
+      shell: powershell
+      run: |
+        Write-Host "Empacotando aplicação..." -ForegroundColor Green
+        
+        # Criar diretório de release
+        New-Item -ItemType Directory -Force -Path "release"
+        
+        # Copiar executáveis principais
+        Copy-Item "target/${{ matrix.job.target }}/release/*.exe" "release/" -Force
+        
+        # Copiar Flutter build
+        Copy-Item -Recurse "flutter/build/windows/x64/runner/Release/*" "release/" -Force
+        
+        # Copiar DLLs necessárias (se houver)
+        if (Test-Path "target/${{ matrix.job.target }}/release/*.dll") {
+            Copy-Item "target/${{ matrix.job.target }}/release/*.dll" "release/" -Force
+        }
+        
+        # Listar arquivos do release
+        Write-Host "Arquivos no release:" -ForegroundColor Yellow
+        Get-ChildItem -Recurse "release/" | Select-Object Name, Length
+        
+        Write-Host "Empacotamento concluído!" -ForegroundColor Green
+
+    - name: Create Installer (Optional)
+      shell: powershell
+      run: |
+        # Aqui você pode adicionar criação de instalador NSIS ou MSI
+        Write-Host "Preparando para criar instalador..." -ForegroundColor Green
+        # TODO: Implementar criação de instalador
+
+    - name: Upload Windows Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: MyRustDesk-Windows
-        path: target/x86_64-pc-windows-msvc/release/*.exe
+        name: ${{ env.CUSTOM_APP_NAME }}-windows-${{ matrix.job.arch }}
+        path: release/
+        retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@v7
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Setup Custom Branding
+      run: |
+        echo "Aplicando customizações no Linux..."
+        
+        # 1. Atualizar nome da aplicação
+        sed -i 's/RustDesk/${{ env.CUSTOM_APP_NAME }}/g' libs/hbb_common/src/config.rs
+        sed -i 's/com.carriez/${{ env.CUSTOM_COMPANY }}/g' libs/hbb_common/src/config.rs
+        
+        # 2. Atualizar servidores  
+        sed -i 's/rs-ny.rustdesk.com/${{ env.CUSTOM_RENDEZVOUS_SERVER }}/g' libs/hbb_common/src/config.rs
+        sed -i 's/OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=/${{ env.CUSTOM_RS_PUB_KEY }}/g' libs/hbb_common/src/config.rs
+        
+        # 3. Atualizar Cargo.toml
+        APP_NAME_LOWER=$(echo '${{ env.CUSTOM_APP_NAME }}' | tr '[:upper:]' '[:lower:]')
+        sed -i "s/name = \"rustdesk\"/name = \"$APP_NAME_LOWER\"/g" Cargo.toml
+        sed -i 's/ProductName = "RustDesk"/ProductName = "${{ env.CUSTOM_APP_NAME }}"/g' Cargo.toml
+        sed -i 's/FileDescription = "RustDesk Remote Desktop"/FileDescription = "${{ env.CUSTOM_APP_NAME }} Remote Desktop"/g' Cargo.toml
+        
+        # 4. Verificar mudanças aplicadas
+        echo "Verificando configurações aplicadas..."
+        grep -n "APP_NAME\|RENDEZVOUS_SERVERS\|RS_PUB_KEY" libs/hbb_common/src/config.rs | head -10
+
+    - name: Remove Unwanted Features
+      run: |
+        echo "Removendo funcionalidades indesejadas..."
+        
+        # Desabilitar LAN Discovery por padrão
+        sed -i 's/OPTION_ENABLE_LAN_DISCOVERY.*=.*"enable-lan-discovery"/OPTION_ENABLE_LAN_DISCOVERY: \&str = "disable-lan-discovery"/g' libs/hbb_common/src/config.rs
+        
+        echo "Funcionalidades removidas com sucesso!"
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          clang \
+          cmake \
+          curl \
+          gcc \
+          git \
+          g++ \
+          libpam0g-dev \
+          libasound2-dev \
+          libunwind-dev \
+          libgstreamer1.0-dev \
+          libgstreamer-plugins-base1.0-dev \
+          libgtk-3-dev \
+          libpulse-dev \
+          libva-dev \
+          libvdpau-dev \
+          libxcb-randr0-dev \
+          libxcb-shape0-dev \
+          libxcb-xfixes0-dev \
+          libxdo-dev \
+          libxfixes-dev \
+          nasm \
+          wget
+
+    - name: Setup vcpkg with GitHub Actions binary cache
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: /opt/artifacts/vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+    - name: Install vcpkg dependencies
+      run: |
+        $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+        
+    - name: Install Rust Toolchain
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Show version information
+      run: |
+        gcc --version || true
+        rustup -V
+        rustup toolchain list
+        rustup default
+        cargo -V
+        rustc -V
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: rustdesk-lib-cache
+        shared-key: linux
+
+    - name: Build RustDesk Core
+      run: |
+        export VCPKG_ROOT=/opt/artifacts/vcpkg
+        cargo build --release --features hwcodec
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version: 3.24.4
+
+    - name: Build Flutter Desktop
+      run: |
+        echo "Building Flutter Desktop for Linux..."
+        cd flutter
+        
+        # Configurar Flutter para Linux Desktop
+        flutter config --enable-linux-desktop
+        flutter pub get
+        
+        # Build Linux Desktop
+        flutter build linux --release
+        
+        echo "Flutter build concluído!"
