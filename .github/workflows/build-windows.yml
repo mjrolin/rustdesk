@@ -35,13 +35,16 @@ jobs:
         Remove-Item -Recurse -Force C:\vcpkg\packages -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force C:\vcpkg\installed -ErrorAction SilentlyContinue
 
-    - name: Install VCPKG dependencies
+    - name: Install VCPKG dependencies with debug output
       run: |
-        .\vcpkg\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static --clean-after-build
+        .\vcpkg\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static --debug --clean-after-build
         .\vcpkg\vcpkg integrate install
 
     - name: Verify VCPKG installation
       run: |
+        dir C:\vcpkg
+        dir C:\vcpkg\installed
+        dir C:\vcpkg\installed\x64-windows-static
         dir C:\vcpkg\installed\x64-windows-static\include
         dir C:\vcpkg\installed\x64-windows-static\include\opus
         dir C:\vcpkg\installed\x64-windows-static\lib
@@ -52,6 +55,7 @@ jobs:
       run: cargo build --release
 
     - name: Upload artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: rustdesk-windows
