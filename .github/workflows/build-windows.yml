@@ -22,17 +22,14 @@ jobs:
       run: |
         choco install -y visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK --add Microsoft.VisualStudio.Component.VC.CMake.Project --add Microsoft.VisualStudio.Component.VC.v141.x86.x64"
 
-    - name: Install aria2 for faster downloads
+    - name: Install CMake
       run: |
-        choco install -y aria2
+        choco install -y cmake
 
     - name: Install VCPKG
       run: |
         git clone https://github.com/microsoft/vcpkg.git
-        cd vcpkg
-        git checkout 6f29f12e82a8293156836ad81cc9bf5af41fe836
-        .\bootstrap-vcpkg.bat -disableMetrics
-        cd ..
+        .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
         echo "VCPKG_ROOT=C:\vcpkg" >> $GITHUB_ENV
         echo "C:\vcpkg" >> $GITHUB_PATH
 
@@ -41,6 +38,11 @@ jobs:
         dir C:\vcpkg
         .\vcpkg\vcpkg version
         .\vcpkg\vcpkg list
+
+    - name: Remove VCPKG manifest and overlays
+      run: |
+        Remove-Item -Force D:\a\rustdesk\rustdesk\vcpkg.json -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force D:\a\rustdesk\rustdesk\res\vcpkg -ErrorAction SilentlyContinue
 
     - name: Clear VCPKG cache
       run: |
@@ -56,36 +58,20 @@ jobs:
         dir C:\vcpkg\ports\libvpx || echo "libvpx port not found"
         dir C:\vcpkg\ports\libyuv || echo "libyuv port not found"
         dir C:\vcpkg\ports\opus || echo "opus port not found"
-        dir D:\a\rustdesk\rustdesk\res\vcpkg || echo "Overlay ports not found"
 
-    - name: Install libvpx with retries
+    - name: Install libvpx
       run: |
-        for ($i = 1; $i -le 3; $i++) {
-          Write-Output "Attempt $i to install libvpx"
-          .\vcpkg\vcpkg install libvpx:x64-windows-static --classic --debug --clean-after-build
-          if ($?) { break }
-          Start-Sleep -Seconds 5
-        }
+        .\vcpkg\vcpkg install libvpx:x64-windows-static --classic --debug --clean-after-build
         if (-not $?) { exit 1 }
 
-    - name: Install libyuv with retries
+    - name: Install libyuv
       run: |
-        for ($i = 1; $i -le 3; $i++) {
-          Write-Output "Attempt $i to install libyuv"
-          .\vcpkg\vcpkg install libyuv:x64-windows-static --classic --debug --clean-after-build
-          if ($?) { break }
-          Start-Sleep -Seconds 5
-        }
+        .\vcpkg\vcpkg install libyuv:x64-windows-static --classic --debug --clean-after-build
         if (-not $?) { exit 1 }
 
-    - name: Install opus with retries
+    - name: Install opus
       run: |
-        for ($i = 1; $i -le 3; $i++) {
-          Write-Output "Attempt $i to install opus"
-          .\vcpkg\vcpkg install opus:x64-windows-static --classic --debug --clean-after-build
-          if ($?) { break }
-          Start-Sleep -Seconds 5
-        }
+        .\vcpkg\vcpkg install opus:x64-windows-static --classic --debug --clean-after-build
         if (-not $?) { exit 1 }
 
     - name: Integrate VCPKG
