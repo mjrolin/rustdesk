@@ -25,14 +25,24 @@ jobs:
     - name: Install VCPKG
       run: |
         git clone https://github.com/microsoft/vcpkg.git
-        .\vcpkg\bootstrap-vcpkg.bat
+        .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
         echo "VCPKG_ROOT=C:\vcpkg" >> $GITHUB_ENV
         echo "C:\vcpkg" >> $GITHUB_PATH
 
+    - name: Clear VCPKG cache
+      run: |
+        Remove-Item -Recurse -Force C:\vcpkg\buildtrees -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force C:\vcpkg\packages -ErrorAction SilentlyContinue
+
     - name: Install VCPKG dependencies
       run: |
-        .\vcpkg\vcpkg install libvpx:x64-windows libyuv:x64-windows opus:x64-windows
+        .\vcpkg\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
         .\vcpkg\vcpkg integrate install
+
+    - name: Verify Opus installation
+      run: |
+        dir C:\vcpkg\installed\x64-windows-static\include\opus
+        dir C:\vcpkg\installed\x64-windows-static\lib
 
     - name: Build RustDesk
       env:
