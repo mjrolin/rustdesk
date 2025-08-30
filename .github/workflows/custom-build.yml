@@ -1,0 +1,140 @@
+name: Custom RustDesk Build
+
+on:
+  push:
+    branches: [ "main", "custom" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
+  # Suas configurações personalizadas
+  CUSTOM_APP_NAME: "SeuAppName"
+  CUSTOM_RENDEZVOUS_SERVER: "rust.opentime.net.br"
+  CUSTOM_API_SERVER: "http://rust.opentime.net.br:21114"
+  CUSTOM_RS_PUB_KEY: "ZjwYUYkzdbD3UU2k6MFm8wXsgwmAJXqlERUiCqqgscA="
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: x86_64-pc-windows-msvc, os: windows-2022, arch: x86_64 }
+          
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Custom Branding
+      shell: powershell
+      run: |
+        # Aplicar nome personalizado
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'RustDesk', '${{ env.CUSTOM_APP_NAME }}' | Set-Content libs/hbb_common/src/config.rs
+        
+        # Aplicar servidor personalizado
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'rs-ny.rustdesk.com', '${{ env.CUSTOM_RENDEZVOUS_SERVER }}' | Set-Content libs/hbb_common/src/config.rs
+        
+        # Aplicar chave pública personalizada  
+        (Get-Content libs/hbb_common/src/config.rs) -replace 'OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=', '${{ env.CUSTOM_RS_PUB_KEY }}' | Set-Content libs/hbb_common/src/config.rs
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+        targets: ${{ matrix.job.target }}
+
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: C:\vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+    - name: Install dependencies
+      run: |
+        C:\vcpkg\vcpkg.exe install --triplet=x64-windows-static --x-install-root=C:\vcpkg\installed
+
+    - name: Build RustDesk
+      run: |
+        cargo build --release --target=${{ matrix.job.target }}
+
+    - name: Build Flutter Desktop
+      shell: powershell
+      run: |
+        cd flutter
+        flutter config --enable-windows-desktop
+        flutter build windows --release
+        
+    - name: Package Application
+      shell: powershell  
+      run: |
+        mkdir release
+        
+        # Copiar executáveis
+        cp target/${{ matrix.job.target }}/release/*.exe release/
+        cp -r flutter/build/windows/runner/Release/* release/
+        
+        # Criar instalador (opcional)
+        # Use NSIS ou Inno Setup aqui
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.CUSTOM_APP_NAME }}-${{ matrix.job.target }}
+        path: release/
+
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Custom Branding
+      run: |
+        # Aplicar configurações personalizadas no Linux
+        sed -i 's/RustDesk/${{ env.CUSTOM_APP_NAME }}/g' libs/hbb_common/src/config.rs
+        sed -i 's/rs-ny.rustdesk.com/${{ env.CUSTOM_RENDEZVOUS_SERVER }}/g' libs/hbb_common/src/config.rs
+        sed -i 's/OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=/${{ env.CUSTOM_RS_PUB_KEY }}/g' libs/hbb_common/src/config.rs
+
+    - name: Install Dependencies  
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          clang \
+          cmake \
+          curl \
+          gcc \
+          git \
+          g++ \
+          libpam0g-dev \
+          libasound2-dev \
+          libpulse-dev \
+          libgtk-3-dev \
+          libxcb-randr0-dev \
+          libxcb-shape0-dev \
+          libxcb-xfixes0-dev \
+          libxdo-dev \
+          libxfixes-dev \
+          nasm
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Build RustDesk
+      run: |
+        cargo build --release
+
+    - name: Upload Linux Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.CUSTOM_APP_NAME }}-linux
+        path: target/release/rustdesk

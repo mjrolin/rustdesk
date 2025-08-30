@@ -100,12 +100,13 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &["rs-ny.Open Desk.com"];
+pub const RENDEZVOUS_SERVERS: &[&str] = &["rust.opentime.net.br"];
 pub const RS_PUB_KEY: &str = "ZjwYUYkzdbD3UU2k6MFm8wXsgwmAJXqlERUiCqqgscA=";
 
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 pub const WS_RENDEZVOUS_PORT: i32 = 21118;
+pub const API_SERVER: "http://rust.opentime.net.br:21114"
 pub const WS_RELAY_PORT: i32 = 21119;
 
 macro_rules! serde_field_string {
@@ -2460,7 +2461,7 @@ pub mod keys {
     pub const OPTION_ENABLE_BLOCK_INPUT: &str = "enable-block-input";
     pub const OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION: &str = "allow-remote-config-modification";
     pub const OPTION_ALLOW_NUMERNIC_ONE_TIME_PASSWORD: &str = "allow-numeric-one-time-password";
-    pub const OPTION_ENABLE_LAN_DISCOVERY: &str = "enable-lan-discovery";
+    pub const OPTION_ENABLE_LAN_DISCOVERY: &str = "N";
     pub const OPTION_DIRECT_SERVER: &str = "direct-server";
     pub const OPTION_DIRECT_ACCESS_PORT: &str = "direct-access-port";
     pub const OPTION_WHITELIST: &str = "whitelist";
