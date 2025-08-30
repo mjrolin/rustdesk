@@ -1,4 +1,4 @@
-name: Build RustDesk for Windows
+name: Build RustDesk for Windows (Adapted from Flutter Build)
 
 on:
   push:
@@ -6,94 +6,78 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  SCITER_RUST_VERSION: "1.75"  # Versão Rust para compatibilidade com Sciter/Flutter
+  RUST_VERSION: "1.75"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"  # Cache de binários do oficial para evitar falhas de download
+  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"  # Baseline do vcpkg.json oficial
+  VERSION: "1.4.0"  # Versão do RustDesk (ajuste se necessário)
+  LLVM_VERSION: "15.0.6"  # Versão LLVM do oficial
+
 jobs:
-  build:
-    runs-on: windows-latest
+  build-windows:
+    runs-on: windows-2022  # Mesma runner do oficial para Windows
+    strategy:
+      matrix:
+        arch:
+          - { target: i686-pc-windows-msvc, vcpkg_triplet: x86-windows-static }  # Para 32-bit, se necessário
+          - { target: x86_64-pc-windows-msvc, vcpkg_triplet: x64-windows-static }  # Para 64-bit
     steps:
-    - name: Checkout repository
+    - name: Checkout source code
       uses: actions/checkout@v4
+      with:
+        submodules: recursive  # Do oficial, para carregar submodules corretamente
 
-    - name: Setup Rust
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        echo "C:\Users\runneradmin\.cargo\bin" >> $GITHUB_PATH
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@v6
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-    - name: Install Visual Studio Build Tools
-      run: |
-        choco install -y visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK --add Microsoft.VisualStudio.Component.VC.CMake.Project --add Microsoft.VisualStudio.Component.VC.v141.x86.x64"
+    - name: Install LLVM and Clang
+      uses: rustdesk-org/install-llvm-action-32bit@master  # Ação customizada do oficial para LLVM
+      with:
+        version: ${{ env.LLVM_VERSION }}
 
-    - name: Install CMake
-      run: |
-        choco install -y cmake
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@v1  # Do oficial
+      with:
+        toolchain: nightly-2023-10-13-${{ matrix.arch.target }}  # Nightly do oficial para features específicas
+        targets: ${{ matrix.arch.target }}
+        components: "rustfmt"
+
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1  # Para ativar o ambiente Visual Studio, do oficial implícito
 
     - name: Install VCPKG
       run: |
         git clone https://github.com/microsoft/vcpkg.git
-        .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+        cd vcpkg
+        git checkout ${{ env.VCPKG_COMMIT_ID }}  # Usa o commit do oficial
+        .\bootstrap-vcpkg.bat -disableMetrics
+        cd ..
         echo "VCPKG_ROOT=C:\vcpkg" >> $GITHUB_ENV
         echo "C:\vcpkg" >> $GITHUB_PATH
 
-    - name: Verify VCPKG installation
+    - name: Install VCPKG dependencies
       run: |
-        dir C:\vcpkg
-        .\vcpkg\vcpkg version
-        .\vcpkg\vcpkg list
-
-    - name: Remove VCPKG manifest and overlays
-      run: |
-        Remove-Item -Force D:\a\rustdesk\rustdesk\vcpkg.json -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force D:\a\rustdesk\rustdesk\res\vcpkg -ErrorAction SilentlyContinue
-
-    - name: Clear VCPKG cache
-      run: |
-        Remove-Item -Recurse -Force C:\vcpkg\buildtrees -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force C:\vcpkg\packages -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force C:\vcpkg\installed -ErrorAction SilentlyContinue
-
-    - name: Check available ports
-      run: |
-        .\vcpkg\vcpkg search libvpx
-        .\vcpkg\vcpkg search libyuv
-        .\vcpkg\vcpkg search opus
-        dir C:\vcpkg\ports\libvpx || echo "libvpx port not found"
-        dir C:\vcpkg\ports\libyuv || echo "libyuv port not found"
-        dir C:\vcpkg\ports\opus || echo "opus port not found"
-
-    - name: Install libvpx
-      run: |
-        .\vcpkg\vcpkg install libvpx:x64-windows-static --classic --debug --clean-after-build
-        if (-not $?) { exit 1 }
-
-    - name: Install libyuv
-      run: |
-        .\vcpkg\vcpkg install libyuv:x64-windows-static --classic --debug --clean-after-build
-        if (-not $?) { exit 1 }
-
-    - name: Install opus
-      run: |
-        .\vcpkg\vcpkg install opus:x64-windows-static --classic --debug --clean-after-build
-        if (-not $?) { exit 1 }
-
-    - name: Integrate VCPKG
-      run: |
-        .\vcpkg\vcpkg integrate install
+        .\vcpkg\vcpkg install libvpx:${{ matrix.arch.vcpkg_triplet }} libyuv:${{ matrix.arch.vcpkg_triplet }} opus:${{ matrix.arch.vcpkg_triplet }} aom:${{ matrix.arch.vcpkg_triplet }}  # Dependências do oficial para Windows static
+        .\vcpkg\vcpkg integrate install  # Integração do oficial
 
     - name: Verify VCPKG installation
       run: |
-        dir C:\vcpkg\installed || echo "Directory C:\vcpkg\installed not found"
-        dir C:\vcpkg\installed\x64-windows-static || echo "Directory C:\vcpkg\installed\x64-windows-static not found"
-        dir C:\vcpkg\installed\x64-windows-static\include || echo "Directory C:\vcpkg\installed\x64-windows-static\include not found"
-        dir C:\vcpkg\installed\x64-windows-static\include\opus || echo "Directory C:\vcpkg\installed\x64-windows-static\include\opus not found"
-        dir C:\vcpkg\installed\x64-windows-static\lib || echo "Directory C:\vcpkg\installed\x64-windows-static\lib not found"
+        dir C:\vcpkg\installed
+        dir C:\vcpkg\installed\${{ matrix.arch.vcpkg_triplet }}\include\opus  # Verifica opus_multistream.h
 
     - name: Build RustDesk
       env:
         VCPKG_ROOT: C:\vcpkg
-      run: cargo build --release
+      run: cargo build --release --target ${{ matrix.arch.target }}  # Build do oficial para o target específico
 
     - name: Upload artifact
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: rustdesk-windows
-        path: target/release/rustdesk.exe
+        name: rustdesk-windows-${{ matrix.arch.target }}
+        path: target/${{ matrix.arch.target }}/release/rustdesk.exe
