@@ -33,14 +33,16 @@ jobs:
       run: |
         Remove-Item -Recurse -Force C:\vcpkg\buildtrees -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force C:\vcpkg\packages -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force C:\vcpkg\installed -ErrorAction SilentlyContinue
 
     - name: Install VCPKG dependencies
       run: |
-        .\vcpkg\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
+        .\vcpkg\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static --clean-after-build
         .\vcpkg\vcpkg integrate install
 
-    - name: Verify Opus installation
+    - name: Verify VCPKG installation
       run: |
+        dir C:\vcpkg\installed\x64-windows-static\include
         dir C:\vcpkg\installed\x64-windows-static\include\opus
         dir C:\vcpkg\installed\x64-windows-static\lib
 
